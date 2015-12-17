@@ -123,12 +123,15 @@ def process_split_position(data, cgi_input, header):
     # Get all lines for each allele. Note that this means we'll end up with
     # data from one line ahead stored in 'next_data'; it will be handled at
     # the end.
-    s1_data, s2_data, next_data = get_split_pos_lines(data, cgi_input, header)
+    s1_data, s2_data, next_data = get_split_pos_lines(
+        data=data, cgi_input=cgi_input, header=header)
 
     # Process all the lines to get concatenated sequences and other data.
     dbsnp_data = []
-    a1_seq, ref_seq, start = process_allele(s1_data, dbsnp_data, header)
-    a2_seq, r2_seq, a2_start = process_allele(s2_data, dbsnp_data, header)
+    a1_seq, ref_seq, start = process_allele(
+        allele_data=s1_data, dbsnp_data=dbsnp_data, header=header)
+    a2_seq, r2_seq, a2_start = process_allele(
+        allele_data=s2_data, dbsnp_data=dbsnp_data, header=header)
     # clean dbsnp data
     dbsnp_data = [x for x in dbsnp_data if x]
     if (a1_seq or ref_seq) and (a2_seq or r2_seq):
@@ -137,12 +140,13 @@ def process_split_position(data, cgi_input, header):
         assert start == a2_start
         yield (chrom, start, dbsnp_data, ref_seq, [a1_seq, a2_seq])
 
-    # Handle the remaining line (may recursively call this function if it's
-    # the start of a new region with separated allele calls).
+    # Handle the remaining line. Could recursively call this function if it's
+    # the start of a new split position - very unlikely, though.
     if next_data[2] == "all" or next_data[1] == "1":
-        out = process_full_position(next_data, header)
+        out = process_full_position(data=next_data, header=header)
     else:
-        out = process_split_position(next_data, cgi_input, header)
+        out = process_split_position(
+            data=next_data, cgi_input=cgi_input, header=header)
     if out:
         for entry in out:
             yield entry
@@ -200,7 +204,7 @@ def vcf_line(input_data, reference):
                       'GT', genotype])
 
 
-def process_next_position(data, cgi_data, header, reference):
+def process_next_position(data, cgi_input, header, reference):
     """
     Determine appropriate processing to get data, then convert it to VCF
 
@@ -222,27 +226,28 @@ def process_next_position(data, cgi_data, header, reference):
     if data[2] == "all" or data[1] == "1":
         # The output from process_full_position is an array, so it can be
         # treated in the same manner as process_split_position output.
-        out = process_full_position(data, header)
+        out = process_full_position(data=data, header=header)
     else:
         assert data[2] == "1"
         # The output from process_split_position is a generator, and may end
         # up calling itself recursively.
-        out = process_split_position(data, cgi_data, header)
+        out = process_split_position(
+            data=data, cgi_input=cgi_input, header=header)
     if out:
-        return [vcf_line(l, reference) for l in out]
+        return [vcf_line(input_data=l, reference=reference) for l in out]
 
 
-def convert(cgi_data, twobit_ref):
+def convert(cgi_input, twobit_ref):
     """Generator that converts CGI var data to VCF-formated strings"""
 
     # Set up CGI input. Default is to assume a str generator.
-    if isinstance(cgi_data, basestring):
-        cgi_data = auto_zip_open(cgi_data, 'rb')
+    if isinstance(cgi_input, basestring):
+        cgi_input = auto_zip_open(cgi_input, 'rb')
 
     # Set up TwoBitFile for retrieving reference sequences.
     reference = twobitreader.TwoBitFile(twobit_ref)
 
-    for line in cgi_data:
+    for line in cgi_input:
         # Skip header lines.
         if re.search(r'^\W*$', line) or line.startswith('#'):
             continue
@@ -256,7 +261,8 @@ def convert(cgi_data, twobit_ref):
         # If we reach this point, this is a line that contains data.
         data = line.rstrip('\n').split("\t")
 
-        out = process_next_position(data, cgi_data, header, reference)
+        out = process_next_position(
+            data=data, cgi_input=cgi_input, header=header, reference=reference)
 
         # process_next_position returns an array of one or more lines
         if out:
@@ -270,7 +276,7 @@ def convert_to_file(cgi_input, output_file, twobit_ref):
     if isinstance(output_file, basestring):
         output_file = auto_zip_open(output_file, 'wb')
 
-    conversion = convert(cgi_input, twobit_ref)  # set up generator
+    conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref)
     for line in conversion:
         output_file.write(line + "\n")
     output_file.close()
