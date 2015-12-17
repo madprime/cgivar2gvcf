@@ -5,7 +5,7 @@ import bz2
 import gzip
 import re
 
-from get_reference import get_reference_allele
+import twobitreader
 
 
 def auto_zip_open(filepath, mode):
@@ -29,7 +29,6 @@ def process_full_position(data, header):
         (string) reference allele sequence
         (array of strings) the genome's allele sequences
     """
-
     feature_type = data[header['varType']]
     # Skip unmatchable, uncovered, or pseudoautosomal-in-X
     if (feature_type == 'no-ref' or feature_type.startswith('no-call') or
@@ -149,37 +148,44 @@ def process_split_position(data, cgi_input, header):
             yield entry
 
 
-def vcf_line(input_data, twobit_ref):
-    """Convert the var files information into VCF format.
+def vcf_line(input_data, reference):
+    """
+    Convert the var files information into VCF format.
 
-    This requires us to up reference genome sequences for length-changing
-    variants where Complete Genomics reports an empty string for either
-    reference or variant sequences. VCF does not allow empty strings, and
-    tells authors to move backwards by one position and prepend that reference
-    base to all allele sequences.
+    This is nontrivial because the var file can contain zero-length variants,
+    which is not allowed by VCF. To handle these cases, we "move backwards"
+    by one position, look up the reference sequence, and add that.
 
     The returned line is a very simple, VCF-valid row containing the
     genome's data for this position.
     """
     chrom, start, dbsnp_data, ref_allele, genome_alleles = input_data
-    # VCF does not allow zero-length sequences. If we have this situation,
+
+    # VCF start position is one less than var file's indexing.
+    start = int(start) - 1
+
+    # VCF doesn't allow zero-length sequences. If we have this situation,
     # move the start backwards by one position, get that reference base,
     # and prepend this base to all sequences.
     if len(ref_allele) == 0 or 0 in [len(v) for v in genome_alleles]:
-        start = str(int(start) - 1)
-        prepend = get_reference_allele(
-            chrom,
-            int(start) - 1,
-            twobit_ref
-        )
+        start = start - 1
+        prepend = reference[chrom][start]
         ref_allele = prepend + ref_allele
         genome_alleles = [prepend + v for v in genome_alleles]
+
+    # Figure out what our alternate alleles are.
     alt_alleles = []
     for allele in genome_alleles:
         if allele not in [ref_allele] + alt_alleles:
             alt_alleles.append(allele)
+
+    # Combine ref and alt for the full set of alleles, used for indexing.
     alleles = [ref_allele] + alt_alleles
+
+    # Get the indexed genotype.
     genotype = '/'.join([str(alleles.index(x)) for x in genome_alleles])
+
+    # Get dbSNP IDs.
     dbsnp_cleaned = []
     for dbsnp in dbsnp_data:
         if dbsnp not in dbsnp_cleaned:
@@ -188,13 +194,31 @@ def vcf_line(input_data, twobit_ref):
         id_field = ';'.join(dbsnp_cleaned)
     else:
         id_field = '.'
-    return '\t'.join([chrom, start, id_field, ref_allele,
+
+    return '\t'.join([chrom, str(start), id_field, ref_allele,
                       ','.join(alt_alleles), '.', '.', '.',
                       'GT', genotype])
 
 
-def process_next_position(data, cgi_data, header, twobit_ref):
-    """Determine appropriate processing to get data, then convert it to VCF"""
+def process_next_position(data, cgi_data, header, reference):
+    """
+    Determine appropriate processing to get data, then convert it to VCF
+
+    There are two types of lines in the var file:
+    - "full position": single allele (hemizygous) or all-allele line
+        All alleles at this position are represented in this line.
+        This is handled with "process_full_position".
+    - "split position": each of two alleles is reported separately. There will
+        be at least two lines, one for each allele (but potentially more).
+        This is handled with "process_split_position".
+
+    Because the number of lines used for separately reported alleles is
+    unknown, process_split_position will always read ahead to the next
+    "full position" and return that as well.
+
+    So the returned line formats are consistent, process_next_position
+    returns an array, even if there's only one line.
+    """
     if data[2] == "all" or data[1] == "1":
         # The output from process_full_position is an array, so it can be
         # treated in the same manner as process_split_position output.
@@ -205,7 +229,7 @@ def process_next_position(data, cgi_data, header, twobit_ref):
         # up calling itself recursively.
         out = process_split_position(data, cgi_data, header)
     if out:
-        return [vcf_line(l, twobit_ref) for l in out]
+        return [vcf_line(l, reference) for l in out]
 
 
 def convert(cgi_data, twobit_ref):
@@ -215,18 +239,26 @@ def convert(cgi_data, twobit_ref):
     if isinstance(cgi_data, basestring):
         cgi_data = auto_zip_open(cgi_data, 'rb')
 
+    # Set up TwoBitFile for retrieving reference sequences.
+    reference = twobitreader.TwoBitFile(twobit_ref)
+
     for line in cgi_data:
+        # Skip header lines.
         if re.search(r'^\W*$', line) or line.startswith('#'):
             continue
+
+        # Store header row labels.
         if line.startswith('>'):
             header_data = line.lstrip('>').rstrip('\n').split('\t')
             header = {header_data[i]: i for i in range(len(header_data))}
             continue
 
+        # If we reach this point, this is a line that contains data.
         data = line.rstrip('\n').split("\t")
 
-        out = process_next_position(data, cgi_data, header, twobit_ref)
-        # process_split_position may read ahead, resulting in multiple lines.
+        out = process_next_position(data, cgi_data, header, reference)
+
+        # process_next_position returns an array of one or more lines
         if out:
             for line in out:
                 yield line
