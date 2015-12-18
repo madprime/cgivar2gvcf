@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # Filename: cgivar2vcf.py
 """Conversion of Complete Genomics, Inc. (CGI) var files to VCF files."""
+from __future__ import unicode_literals
 import bz2
 from collections import OrderedDict
 import datetime
@@ -159,13 +160,13 @@ def get_split_pos_lines(data, cgi_input, header):
     """
     s1_data = [data]
     s2_data = []
-    next_data = cgi_input.next().rstrip('\n').split("\t")
+    next_data = cgi_input.readline().decode('utf-8').rstrip('\n').split("\t")
     while next_data[header['allele']] == "1":
         s1_data.append(next_data)
-        next_data = cgi_input.next().rstrip('\n').split("\t")
+        next_data = cgi_input.readline().decode('utf-8').rstrip('\n').split("\t")
     while next_data[header['allele']] == "2":
         s2_data.append(next_data)
-        next_data = cgi_input.next().rstrip('\n').split("\t")
+        next_data = cgi_input.readline().decode('utf-8').rstrip('\n').split("\t")
     return s1_data, s2_data, next_data
 
 
@@ -374,8 +375,9 @@ def convert(cgi_input, twobit_ref, build, var_only=False):
     """Generator that converts CGI var data to VCF-formated strings"""
 
     # Set up CGI input. Default is to assume a str generator.
-    if isinstance(cgi_input, basestring):
+    if isinstance(cgi_input, str):
         cgi_input = auto_zip_open(cgi_input, 'rb')
+
 
     # Set up TwoBitFile for retrieving reference sequences.
     reference = twobitreader.TwoBitFile(twobit_ref)
@@ -385,7 +387,12 @@ def convert(cgi_input, twobit_ref, build, var_only=False):
     for line in header:
         yield line
 
-    for line in cgi_input:
+    while True:
+        line = cgi_input.readline()
+        if not line:
+            break
+        line = line.decode('utf-8')
+
         # Skip header lines.
         if re.search(r'^\W*$', line) or line.startswith('#'):
             continue
@@ -412,8 +419,8 @@ def convert(cgi_input, twobit_ref, build, var_only=False):
 def convert_to_file(cgi_input, output_file, twobit_ref, build, var_only=False):
     """Convert a CGI var file and output VCF-formatted data to file"""
 
-    if isinstance(output_file, basestring):
-        output_file = auto_zip_open(output_file, 'wb')
+    if isinstance(output_file, str):
+        output_file = auto_zip_open(output_file, 'wt')
 
     conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref, build=build, var_only=var_only)
     for line in conversion:
