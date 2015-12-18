@@ -4,15 +4,15 @@ from os import path
 here = path.abspath(path.dirname(__file__))
 
 setup(
-    name='cgivar2vcf',
-    version='0.1dev2',
+    name='cgivar2gvcf',
+    version='0.1dev3',
     description='Lossy conversion of Complete Genomics var file to VCF',
     url='https://github.com/madprime/cgivar2vcf',
     author_email='mpball@gmail.com',
     license='MIT',
 
     classifiers=[
-        'Development Status :: 1 - Planning',
+        'Development Status :: 2 - Pre-Alpha',
     ],
 
     packages=['cgivar2vcf'],
