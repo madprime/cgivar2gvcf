@@ -2,13 +2,17 @@
 # Filename: cgivar2vcf.py
 """Conversion of Complete Genomics, Inc. (CGI) var files to VCF files."""
 from __future__ import unicode_literals
+import argparse
 import bz2
 from collections import OrderedDict
 import datetime
 import gzip
+import os
 import re
+import sys
 
 import twobitreader
+from twobitreader import download as twobitdownload
 
 
 VCF_DATA_TEMPLATE = OrderedDict([
@@ -25,6 +29,7 @@ VCF_DATA_TEMPLATE = OrderedDict([
 ])
 
 FILEDATE = datetime.datetime.now()
+
 
 def make_header(build):
     header = """##fileformat=VCFv4.1
@@ -58,7 +63,8 @@ def formatted_vcf_line(vcf_data):
 
 
 def process_full_position(data, header, var_only=False):
-    """Return genetic data when all alleles called on same line.
+    """
+    Return genetic data when all alleles called on same line.
 
     Returns an array containing one item, a tuple of five items:
         (string) chromosome
@@ -198,9 +204,11 @@ def process_split_position(data, cgi_input, header, reference, var_only=False):
     # Process all the lines to get concatenated sequences and other data.
     dbsnp_data = []
     a1_seq, ref_seq, start, a1_filters = process_allele(
-        allele_data=s1_data, dbsnp_data=dbsnp_data, header=header, reference=reference)
+        allele_data=s1_data, dbsnp_data=dbsnp_data,
+        header=header, reference=reference)
     a2_seq, r2_seq, a2_start, a2_filters = process_allele(
-        allele_data=s2_data, dbsnp_data=dbsnp_data, header=header, reference=reference)
+        allele_data=s2_data, dbsnp_data=dbsnp_data,
+        header=header, reference=reference)
     # clean dbsnp data
     dbsnp_data = [x for x in dbsnp_data if x]
     if (a1_seq or ref_seq) and (a2_seq or r2_seq):
@@ -218,10 +226,12 @@ def process_split_position(data, cgi_input, header, reference, var_only=False):
     # Handle the remaining line. Could recursively call this function if it's
     # the start of a new split position - very unlikely, though.
     if next_data[2] == "all" or next_data[1] == "1":
-        out = process_full_position(data=next_data, header=header, var_only=var_only)
+        out = process_full_position(
+            data=next_data, header=header, var_only=var_only)
     else:
         out = process_split_position(
-            data=next_data, cgi_input=cgi_input, header=header, reference=reference, var_only=var_only)
+            data=next_data, cgi_input=cgi_input, header=header,
+            reference=reference, var_only=var_only)
     if out:
         for entry in out:
             yield entry
@@ -296,7 +306,8 @@ def vcf_line(input_data, reference):
         start = start - 1
         prepend = reference[input_data['chrom']][start].upper()
         ref_allele = prepend + ref_allele
-        genome_alleles = [prepend + v if v != '?' else v for v in genome_alleles]
+        genome_alleles = [prepend + v if v != '?' else v for v in
+                          genome_alleles]
 
     # Figure out what our alternate alleles are.
     alt_alleles = []
@@ -378,7 +389,6 @@ def convert(cgi_input, twobit_ref, build, var_only=False):
     if isinstance(cgi_input, str) or isinstance(cgi_input, unicode):
         cgi_input = auto_zip_open(cgi_input, 'rb')
 
-
     # Set up TwoBitFile for retrieving reference sequences.
     reference = twobitreader.TwoBitFile(twobit_ref)
 
@@ -420,9 +430,81 @@ def convert_to_file(cgi_input, output_file, twobit_ref, build, var_only=False):
     """Convert a CGI var file and output VCF-formatted data to file"""
 
     if isinstance(output_file, str):
-        output_file = auto_zip_open(output_file, 'wt')
+        output_file = auto_zip_open(output_file, 'w')
 
     conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref, build=build, var_only=var_only)
     for line in conversion:
         output_file.write(line + "\n")
     output_file.close()
+
+
+def get_reference_genome_file(refseqdir, build):
+    """
+    Convenience fxn to get reference genome from target dir, download if needed
+    """
+    if not os.path.exists(refseqdir) or not os.path.isdir(refseqdir):
+        raise ValueError("No directory at {}".format(refseqdir))
+    twobitname = ''
+    if build in ['b37', 'build 37', 'build37', '37', 'hg19']:
+        twobitname = 'hg19.2bit'
+        build = 'build37'
+    if not twobitname:
+        raise ValueError('Genome bulid "{}" not supported.'.format(build))
+    twobit_path = os.path.join(refseqdir, twobitname)
+    if not os.path.exists(twobit_path):
+        twobitdownload.save_genome('hg19', destdir=refseqdir)
+    return twobit_path, build
+
+
+def from_command_line(args):
+    """
+    Run CGI var to gVCF conversion based on command line arguments.
+    """
+    # Get local twobit file from its directory. Download and store if needed.
+    twobit_path, build = get_reference_genome_file(args.refseqdir, build='b37')
+    # Handle input
+    if sys.stdin.isatty():  # false if data is piped in
+        var_input = args.cgivarfile
+    else:
+        var_input = sys.stdin
+    # Handle output
+    if args.vcfoutfile:
+        convert_to_file(var_input,
+                        args.vcfoutfile,
+                        twobit_path,
+                        build,
+                        args.varonly)
+    else:
+        for line in convert(
+                cgi_input=var_input,
+                twobit_ref=twobit_path,
+                build=build,
+                var_only=args.varonly):
+            print(line)
+
+
+if __name__ == "__main__":
+    # Parse options
+    parser = argparse.ArgumentParser(
+        description='Convert Complete Genomics var files to gVCF format.')
+    parser.add_argument(
+        '-d', '--refseqdir', metavar='REFSEQDIR', required=True,
+        dest='refseqdir',
+        help='Directory twobit reference genomes files are stored.')
+    parser.add_argument(
+        '-i', '--input', metavar='INPUTVARFILE',
+        dest='cgivarfile',
+        help='Path to Complete Genomics var file to convert. If omitted, data '
+        ' also be piped in as standard input.')
+    parser.add_argument(
+        '-o', '--output', metavar='OUTPUTVCFFILE',
+        dest='vcfoutfile',
+        help='Path to where to save output VCF file.')
+    parser.add_argument(
+        '-D', '--download', action='store_true', dest='downloadrefseq',
+        help='Download the 2bit file from UCSC to REFSEQDIR, if needed.')
+    parser.add_argument(
+        '-v', '--var-only', action='store_true', dest='varonly',
+        help='Only report variant lines (i.e. VCF, but not gVCF)')
+    args = parser.parse_args()
+    from_command_line(args)
