@@ -456,34 +456,10 @@ def get_reference_genome_file(refseqdir, build):
     return twobit_path, build
 
 
-def from_command_line(args):
+def from_command_line():
     """
-    Run CGI var to gVCF conversion based on command line arguments.
+    Run CGI var to gVCF conversion from the command line.
     """
-    # Get local twobit file from its directory. Download and store if needed.
-    twobit_path, build = get_reference_genome_file(args.refseqdir, build='b37')
-    # Handle input
-    if sys.stdin.isatty():  # false if data is piped in
-        var_input = args.cgivarfile
-    else:
-        var_input = sys.stdin
-    # Handle output
-    if args.vcfoutfile:
-        convert_to_file(var_input,
-                        args.vcfoutfile,
-                        twobit_path,
-                        build,
-                        args.varonly)
-    else:
-        for line in convert(
-                cgi_input=var_input,
-                twobit_ref=twobit_path,
-                build=build,
-                var_only=args.varonly):
-            print(line)
-
-
-if __name__ == "__main__":
     # Parse options
     parser = argparse.ArgumentParser(
         description='Convert Complete Genomics var files to gVCF format.')
@@ -507,4 +483,29 @@ if __name__ == "__main__":
         '-v', '--var-only', action='store_true', dest='varonly',
         help='Only report variant lines (i.e. VCF, but not gVCF)')
     args = parser.parse_args()
-    from_command_line(args)
+
+    # Get local twobit file from its directory. Download and store if needed.
+    twobit_path, build = get_reference_genome_file(args.refseqdir, build='b37')
+    # Handle input
+    if sys.stdin.isatty():  # false if data is piped in
+        var_input = args.cgivarfile
+    else:
+        var_input = sys.stdin
+    # Handle output
+    if args.vcfoutfile:
+        convert_to_file(var_input,
+                        args.vcfoutfile,
+                        twobit_path,
+                        build,
+                        args.varonly)
+    else:
+        for line in convert(
+                cgi_input=var_input,
+                twobit_ref=twobit_path,
+                build=build,
+                var_only=args.varonly):
+            print(line)
+
+
+if __name__ == '__main__':
+    from_command_line()
