@@ -46,7 +46,10 @@ def main(args):
                                     args.varonly)
     else:
         for line in cgivar2gvcf.convert(
-                var_input, twobit_path, build, args.varonly):
+                cgi_input=var_input,
+                twobit_ref=twobit_path,
+                build=build,
+                var_only=args.varonly):
             print(line)
 
 

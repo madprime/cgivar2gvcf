@@ -375,7 +375,7 @@ def convert(cgi_input, twobit_ref, build, var_only=False):
     """Generator that converts CGI var data to VCF-formated strings"""
 
     # Set up CGI input. Default is to assume a str generator.
-    if isinstance(cgi_input, str):
+    if isinstance(cgi_input, str) or isinstance(cgi_input, unicode):
         cgi_input = auto_zip_open(cgi_input, 'rb')
 
 
