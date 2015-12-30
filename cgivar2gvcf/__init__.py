@@ -31,18 +31,18 @@ VCF_DATA_TEMPLATE = OrderedDict([
 FILEDATE = datetime.datetime.now()
 
 
-def make_header(build):
+def make_header(reference):
     header = """##fileformat=VCFv4.1
 ##fileDate={}{}{}
-##source=cgivar2gvcf-version-0.1dev3
+##source=cgivar2gvcf-version-0.1.5
+##description="Produced from a Complete Genomics var file using cgivar2gvcf. Not intended for clinical use."
 ##reference={}
-##ALT=<ID=NON_REF,Description="Represents any possible alternative allele at this location">
 ##FILTER=<ID=NOCALL,Description="Some or all of this record had no sequence call by Complete Genomics">
 ##FILTER=<ID=VQLOW,Description="Some or all of this sequence call marked as low variant quality by Complete Genomics">
 ##FILTER=<ID=AMBIGUOUS,Description="Some or all of this sequence call marked as ambiguous by Complete Genomics">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
 ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
-""".format(FILEDATE.year, FILEDATE.month, FILEDATE.day, build)
+""".format(FILEDATE.year, FILEDATE.month, FILEDATE.day, reference)
     header = header + ("#" + '\t'.join([k for k in VCF_DATA_TEMPLATE]))
     return header
 
@@ -382,7 +382,7 @@ def process_next_position(data, cgi_input, header, reference, var_only):
                 l['chrom'] != 'chrM']
 
 
-def convert(cgi_input, twobit_ref, build, var_only=False):
+def convert(cgi_input, twobit_ref, twobit_name, var_only=False):
     """Generator that converts CGI var data to VCF-formated strings"""
 
     # Set up CGI input. Default is to assume a str generator.
@@ -393,7 +393,7 @@ def convert(cgi_input, twobit_ref, build, var_only=False):
     reference = twobitreader.TwoBitFile(twobit_ref)
 
     # Output header.
-    header = make_header(build).split('\n')
+    header = make_header(twobit_name).split('\n')
     for line in header:
         yield line
 
@@ -426,13 +426,13 @@ def convert(cgi_input, twobit_ref, build, var_only=False):
                 yield line
 
 
-def convert_to_file(cgi_input, output_file, twobit_ref, build, var_only=False):
+def convert_to_file(cgi_input, output_file, twobit_ref, twobit_name, var_only=False):
     """Convert a CGI var file and output VCF-formatted data to file"""
 
     if isinstance(output_file, str):
         output_file = auto_zip_open(output_file, 'w')
 
-    conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref, build=build, var_only=var_only)
+    conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref, twobit_name=twobit_name, var_only=var_only)
     for line in conversion:
         output_file.write(line + "\n")
     output_file.close()
@@ -444,16 +444,16 @@ def get_reference_genome_file(refseqdir, build):
     """
     if not os.path.exists(refseqdir) or not os.path.isdir(refseqdir):
         raise ValueError("No directory at {}".format(refseqdir))
-    twobitname = ''
+    twobit_name = ''
     if build in ['b37', 'build 37', 'build37', '37', 'hg19']:
-        twobitname = 'hg19.2bit'
+        twobit_name = 'hg19.2bit'
         build = 'build37'
-    if not twobitname:
+    if not twobit_name:
         raise ValueError('Genome bulid "{}" not supported.'.format(build))
-    twobit_path = os.path.join(refseqdir, twobitname)
+    twobit_path = os.path.join(refseqdir, twobit_name)
     if not os.path.exists(twobit_path):
         twobitdownload.save_genome('hg19', destdir=refseqdir)
-    return twobit_path, build
+    return twobit_path, twobit_name
 
 
 def from_command_line():
@@ -485,7 +485,8 @@ def from_command_line():
     args = parser.parse_args()
 
     # Get local twobit file from its directory. Download and store if needed.
-    twobit_path, build = get_reference_genome_file(args.refseqdir, build='b37')
+    twobit_path, twobit_name = get_reference_genome_file(
+        args.refseqdir, build='b37')
     # Handle input
     if sys.stdin.isatty():  # false if data is piped in
         var_input = args.cgivarfile
@@ -496,13 +497,13 @@ def from_command_line():
         convert_to_file(var_input,
                         args.vcfoutfile,
                         twobit_path,
-                        build,
+                        twobit_name,
                         args.varonly)
     else:
         for line in convert(
                 cgi_input=var_input,
                 twobit_ref=twobit_path,
-                build=build,
+                twobit_name=twobit_name,
                 var_only=args.varonly):
             print(line)
 
