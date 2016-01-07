@@ -5,7 +5,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='cgivar2gvcf',
-    version='0.1.5',
+    version='0.1.6',
     description='Conversion of Complete Genomics var file to gVCF',
     url='https://github.com/madprime/cgivar2gvcf',
     author='Madeleine Ball',

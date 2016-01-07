@@ -34,7 +34,7 @@ FILEDATE = datetime.datetime.now()
 def make_header(reference):
     header = """##fileformat=VCFv4.1
 ##fileDate={}{}{}
-##source=cgivar2gvcf-version-0.1.5
+##source=cgivar2gvcf-version-0.1.6
 ##description="Produced from a Complete Genomics var file using cgivar2gvcf. Not intended for clinical use."
 ##reference={}
 ##FILTER=<ID=NOCALL,Description="Some or all of this record had no sequence call by Complete Genomics">
@@ -148,8 +148,7 @@ def process_allele(allele_data, dbsnp_data, header, reference):
             for dbsnp_item in data[header['xRef']].split(';'):
                 dbsnp_data.append(dbsnp_item.split(':')[1])
     # It's theoretically possible to break up a partial no-call allele into
-    # separated gVCF lines, but it's hard. Such events are rare.
-    # We'll treat them all -no-call.
+    # separated gVCF lines, but it's hard. Treat the whole allele as no-call.
     if 'NOCALL' in filters:
         filters = ['NOCALL']
         var_allele = '?'
@@ -215,13 +214,26 @@ def process_split_position(data, cgi_input, header, reference, var_only=False):
         # Check that reference sequence and positions match.
         assert ref_seq == r2_seq
         assert start == a2_start
-        yield {'chrom': chrom,
-               'start': start,
-               'dbsnp_data': dbsnp_data,
-               'ref_seq': ref_seq,
-               'alleles': [a1_seq, a2_seq],
-               'allele_count': '2',
-               'filters': list(set(a1_filters + a2_filters))}
+        if (a1_seq != '?') or (a2_seq != '?'):
+            yield {'chrom': chrom,
+                   'start': start,
+                   'dbsnp_data': dbsnp_data,
+                   'ref_seq': ref_seq,
+                   'alleles': [a1_seq, a2_seq],
+                   'allele_count': '2',
+                   'filters': list(set(a1_filters + a2_filters))}
+        else:
+            # Handle edge case: because we create full no-calls from partial
+            # no-call alleles, we may end up with a full no-call region.
+            end = str(int(start) + len(ref_seq))
+            yield {'chrom': chrom,
+                    'start': start,
+                    'dbsnp_data': [],
+                    'ref_seq': '=',
+                    'alleles': ['?'],
+                    'allele_count': '2',
+                    'filters': ['NOCALL'],
+                    'end': end}
 
     # Handle the remaining line. Could recursively call this function if it's
     # the start of a new split position - very unlikely, though.
