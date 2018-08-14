@@ -390,8 +390,10 @@ def process_next_position(data, cgi_input, header, reference, var_only):
         #   Cambridge Reference Sequence for the mitochondrion (NC_012920.1).
         #   This assembly (though with an alternate mitochondrial sequence) is
         #   also known as UCSC hg19.
-        return [vcf_line(input_data=l, reference=reference) for l in out if
-                l['chrom'] != 'chrM']
+        vcf_lines = [vcf_line(input_data=l, reference=reference) for l in out
+                     if l['chrom'] != 'chrM']
+        return [vl for vl in vcf_lines if not
+               (var_only and vl.rstrip().endswith('./.'))]
 
 
 def convert(cgi_input, twobit_ref, twobit_name, var_only=False):
