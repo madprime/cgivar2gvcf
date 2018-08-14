@@ -340,7 +340,7 @@ def vcf_line(input_data, reference):
     vcf_data['POS'] = str(start + 1)
     vcf_data['ID'] = id_field
     vcf_data['REF'] = ref_allele
-    vcf_data['ALT'] = ','.join(alt_alleles)
+    vcf_data['ALT'] = ','.join(alt_alleles) if alt_alleles else '.'
     vcf_data['FORMAT'] = 'GT'
     vcf_data['SAMPLE'] = genotype
 
