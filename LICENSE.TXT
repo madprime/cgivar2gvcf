@@ -1,4 +1,4 @@
-Copyright (c) 2015 Madeleine Price Ball
+Copyright (c) 2016 Mad Price Ball
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
