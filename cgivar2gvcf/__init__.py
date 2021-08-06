@@ -100,6 +100,10 @@ def process_full_position(data, header, var_only=False):
     alleles = [data[header['alleleSeq']]]
     dbsnp_data = []
     dbsnp_data = data[header['xRef']].split(';')
+    var_scores = []
+    if data[header['varScoreVAF']] or data[header['varScoreEAF']]:
+        var_scores.append(data[header['varScoreVAF']])
+        var_scores.append(data[header['varScoreEAF']])
     assert data[header['ploidy']] in ['1', '2']
     if feature_type == 'ref' or feature_type == 'no-call':
         return [{'chrom': chrom,
@@ -117,6 +121,7 @@ def process_full_position(data, header, var_only=False):
                  'ref_seq': ref_allele,
                  'alleles': alleles,
                  'allele_count': data[header['ploidy']],
+                 'varScores': var_scores,
                  'filters': filters}]
 
 
