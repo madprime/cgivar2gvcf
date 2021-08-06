@@ -34,13 +34,16 @@ FILEDATE = datetime.datetime.now()
 def make_header(reference):
     header = """##fileformat=VCFv4.1
 ##fileDate={}{}{}
-##source=cgivar2gvcf-version-0.1.6
+##source=cgivar2gvcf-version-0.1.9
 ##description="Produced from a Complete Genomics var file using cgivar2gvcf. Not intended for clinical use."
 ##reference={}
+##FILTER=<ID=PASS,Description="All filters passed">
 ##FILTER=<ID=NOCALL,Description="Some or all of this record had no sequence call by Complete Genomics">
 ##FILTER=<ID=VQLOW,Description="Some or all of this sequence call marked as low variant quality by Complete Genomics">
 ##FILTER=<ID=AMBIGUOUS,Description="Some or all of this sequence call marked as ambiguous by Complete Genomics">
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=VAF,Number=R,Type=Integer,Description="Positive integer representing confidence in the call as reported in the varScoreVAF of Complete Genomics. It is derived from the probability estimates under maximum likelihood variable allele fraction. This field is empty for reference calls or no-calls">
+##FORMAT=<ID=EAF,Number=R,Type=Integer,Description="Positive or negative integer representing confidence in the call as reported in the varScoreEAF of Complete Genomics. It is derived from the probability estimates under equal allele fraction model. This field is empty for reference calls or no-calls">
 ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
 """.format(FILEDATE.year, FILEDATE.month, FILEDATE.day, reference)
     header = header + ("#" + '\t'.join([k for k in VCF_DATA_TEMPLATE]))
