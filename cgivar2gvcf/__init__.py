@@ -126,7 +126,7 @@ def process_full_position(data, header, var_only=False, qual_scores=False):
                  'filters': filters}]
 
 
-def process_allele(allele_data, dbsnp_data, header, reference):
+def process_allele(allele_data, dbsnp_data, header, reference, qual_scores):
     """Combine data from multiple lines refering to a single allele.
 
     Returns three items in this order:
@@ -139,6 +139,8 @@ def process_allele(allele_data, dbsnp_data, header, reference):
     var_allele = ''
     ref_allele = ''
     filters = []
+    vaf_score = []
+    eaf_score = []
     for data in allele_data:
         if 'varQuality' in header:
             if 'VQLOW' in data[header['varQuality']]:
@@ -156,12 +158,24 @@ def process_allele(allele_data, dbsnp_data, header, reference):
         if data[header['xRef']]:
             for dbsnp_item in data[header['xRef']].split(';'):
                 dbsnp_data.append(dbsnp_item.split(':')[1])
+        if qual_scores:
+            assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
+            vaf_score.append(int(data[header['varScoreVAF']]))
+            eaf_score.append(int(data[header['varScoreEAF']]))
+    if qual_scores:
+        assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
+        vaf_score = [str(int(mean(vaf_score)))]
+        eaf_score = [str(int(mean(eaf_score)))]
     # It's theoretically possible to break up a partial no-call allele into
     # separated gVCF lines, but it's hard. Treat the whole allele as no-call.
     if 'NOCALL' in filters:
         filters = ['NOCALL']
         var_allele = '?'
-    return var_allele, ref_allele, start, filters
+        assert vaf_score == []
+        assert eaf_score == []
+        # vaf_score = []
+        # eaf_score = []
+    return var_allele, ref_allele, start, filters, vaf_score, eaf_score
 
 
 def get_split_pos_lines(data, cgi_input, header):
