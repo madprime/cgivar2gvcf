@@ -404,7 +404,7 @@ def process_next_position(data, cgi_input, header, reference, var_only):
                (var_only and vl.rstrip().endswith('./.'))]
 
 
-def convert(cgi_input, twobit_ref, twobit_name, var_only=False):
+def convert(cgi_input, twobit_ref, twobit_name, var_only=False, qual_scores=False):
     """Generator that converts CGI var data to VCF-formated strings"""
 
     # Set up CGI input. Default is to assume a str generator.
@@ -440,7 +440,7 @@ def convert(cgi_input, twobit_ref, twobit_name, var_only=False):
 
         out = process_next_position(
             data=data, cgi_input=cgi_input, header=header, reference=reference,
-            var_only=var_only)
+            var_only=var_only, qual_scores=qual_scores)
 
         # process_next_position returns an array of one or more lines
         if out:
