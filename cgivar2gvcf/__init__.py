@@ -448,13 +448,14 @@ def convert(cgi_input, twobit_ref, twobit_name, var_only=False):
                 yield line
 
 
-def convert_to_file(cgi_input, output_file, twobit_ref, twobit_name, var_only=False):
+def convert_to_file(cgi_input, output_file, twobit_ref, twobit_name, var_only=False, qual_scores=False):
     """Convert a CGI var file and output VCF-formatted data to file"""
 
     if isinstance(output_file, str):
         output_file = auto_zip_open(output_file, 'w')
 
-    conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref, twobit_name=twobit_name, var_only=var_only)
+    conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref, twobit_name=twobit_name, var_only=var_only,
+                         qual_scores=qual_scores)
     for line in conversion:
         output_file.write(line + "\n")
     output_file.close()
