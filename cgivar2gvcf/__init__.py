@@ -360,7 +360,7 @@ def vcf_line(input_data, reference):
     return formatted_vcf_line(vcf_data)
 
 
-def process_next_position(data, cgi_input, header, reference, var_only):
+def process_next_position(data, cgi_input, header, reference, var_only, qual_scores):
     """
     Determine appropriate processing to get data, then convert it to VCF
 
@@ -382,13 +382,14 @@ def process_next_position(data, cgi_input, header, reference, var_only):
     if data[2] == "all" or data[1] == "1":
         # The output from process_full_position is an array, so it can be
         # treated in the same manner as process_split_position output.
-        out = process_full_position(data=data, header=header, var_only=var_only)
+        out = process_full_position(data=data, header=header, var_only=var_only, qual_scores=qual_scores)
     else:
         assert data[2] == "1"
         # The output from process_split_position is a generator, and may end
         # up calling itself recursively.
         out = process_split_position(
-            data=data, cgi_input=cgi_input, header=header, reference=reference, var_only=var_only)
+            data=data, cgi_input=cgi_input, header=header, reference=reference, var_only=var_only,
+            qual_scores=qual_scores)
     if out:
 
         # ChrM is skipped because Complete Genomics is using a different
