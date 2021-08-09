@@ -184,7 +184,7 @@ def get_split_pos_lines(data, cgi_input, header):
     return s1_data, s2_data, next_data
 
 
-def process_split_position(data, cgi_input, header, reference, var_only=False):
+def process_split_position(data, cgi_input, header, reference, var_only=False, qual_scores=False):
     """Process CGI var where alleles are reported separately.
 
     Split positions report each allele with one or more lines. To ensure that
@@ -211,12 +211,12 @@ def process_split_position(data, cgi_input, header, reference, var_only=False):
 
     # Process all the lines to get concatenated sequences and other data.
     dbsnp_data = []
-    a1_seq, ref_seq, start, a1_filters = process_allele(
+    a1_seq, ref_seq, start, a1_filters, a1_vaf_score, a1_eaf_score = process_allele(
         allele_data=s1_data, dbsnp_data=dbsnp_data,
-        header=header, reference=reference)
-    a2_seq, r2_seq, a2_start, a2_filters = process_allele(
+        header=header, reference=reference, qual_scores=qual_scores)
+    a2_seq, r2_seq, a2_start, a2_filters, a2_vaf_score, a2_eaf_score = process_allele(
         allele_data=s2_data, dbsnp_data=dbsnp_data,
-        header=header, reference=reference)
+        header=header, reference=reference, qual_scores=qual_scores)
     # clean dbsnp data
     dbsnp_data = [x for x in dbsnp_data if x]
     if (a1_seq or ref_seq) and (a2_seq or r2_seq):
@@ -229,6 +229,7 @@ def process_split_position(data, cgi_input, header, reference, var_only=False):
                    'dbsnp_data': dbsnp_data,
                    'ref_seq': ref_seq,
                    'alleles': [a1_seq, a2_seq],
+                   'varScores': [a1_vaf_score, a1_eaf_score, a2_vaf_score, a2_eaf_score],
                    'allele_count': '2',
                    'filters': list(set(a1_filters + a2_filters))}
         else:
@@ -240,6 +241,7 @@ def process_split_position(data, cgi_input, header, reference, var_only=False):
                     'dbsnp_data': [],
                     'ref_seq': '=',
                     'alleles': ['?'],
+                    #'varScores': [a1_vaf_score, a1_eaf_score, a2_vaf_score, a2_eaf_score],
                     'allele_count': '2',
                     'filters': ['NOCALL'],
                     'end': end}
@@ -248,11 +250,11 @@ def process_split_position(data, cgi_input, header, reference, var_only=False):
     # the start of a new split position - very unlikely, though.
     if next_data[2] == "all" or next_data[1] == "1":
         out = process_full_position(
-            data=next_data, header=header, var_only=var_only)
+            data=next_data, header=header, var_only=var_only, qual_scores=qual_scores)
     else:
         out = process_split_position(
             data=next_data, cgi_input=cgi_input, header=header,
-            reference=reference, var_only=var_only)
+            reference=reference, var_only=var_only, qual_scores=qual_scores)
     if out:
         for entry in out:
             yield entry
