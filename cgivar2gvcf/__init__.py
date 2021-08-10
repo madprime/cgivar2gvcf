@@ -122,7 +122,7 @@ def process_full_position(data, header, var_only=False, qual_scores=False):
                  'ref_seq': ref_allele,
                  'alleles': alleles,
                  'allele_count': data[header['ploidy']],
-                 'varScores': var_scores,
+                 'var_scores': var_scores,
                  'filters': filters}]
 
 
@@ -243,7 +243,7 @@ def process_split_position(data, cgi_input, header, reference, var_only=False, q
                    'dbsnp_data': dbsnp_data,
                    'ref_seq': ref_seq,
                    'alleles': [a1_seq, a2_seq],
-                   'varScores': [a1_vaf_score, a1_eaf_score, a2_vaf_score, a2_eaf_score],
+                   'var_scores': [a1_vaf_score + ',' + a2_vaf_score, a1_eaf_score + ',' + a2_eaf_score],
                    'allele_count': '2',
                    'filters': list(set(a1_filters + a2_filters))}
         else:
@@ -255,7 +255,7 @@ def process_split_position(data, cgi_input, header, reference, var_only=False, q
                     'dbsnp_data': [],
                     'ref_seq': '=',
                     'alleles': ['?'],
-                    #'varScores': [a1_vaf_score, a1_eaf_score, a2_vaf_score, a2_eaf_score],
+                    #'var_scores': [a1_vaf_score, a1_eaf_score, a2_vaf_score, a2_eaf_score],
                     'allele_count': '2',
                     'filters': ['NOCALL'],
                     'end': end}
@@ -366,8 +366,12 @@ def vcf_line(input_data, reference):
     vcf_data['ID'] = id_field
     vcf_data['REF'] = ref_allele
     vcf_data['ALT'] = ','.join(alt_alleles) if alt_alleles else '.'
-    vcf_data['FORMAT'] = 'GT'
-    vcf_data['SAMPLE'] = genotype
+    if input_data['var_scores']:
+        vcf_data['FORMAT'] = 'GT:VAF:EAF'
+        vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
+    else:
+        vcf_data['FORMAT'] = 'GT'
+        vcf_data['SAMPLE'] = genotype
 
     if input_data['filters']:
         vcf_data['FILTER'] = ';'.join(sorted(input_data['filters']))
