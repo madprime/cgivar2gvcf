@@ -159,22 +159,31 @@ def process_allele(allele_data, dbsnp_data, header, reference, qual_scores):
             for dbsnp_item in data[header['xRef']].split(';'):
                 dbsnp_data.append(dbsnp_item.split(':')[1])
         if qual_scores:
+            # print("process_allele() -> 1st qual_scores call -> ", qual_scores)
             assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
+            # print(data[header['varScoreVAF']], data[header['varScoreEAF']])
             vaf_score.append(int(data[header['varScoreVAF']]))
             eaf_score.append(int(data[header['varScoreEAF']]))
-    if qual_scores:
+    if qual_scores and 'NOCALL' not in filters:
+        # print("process_allele() -> 2nd qual_scores call -> ", qual_scores)
+        # print("None: ", vaf_score, eaf_score)
+        # print(filters)
+        # print(data)
+        
         assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
-        vaf_score = [str(int(mean(vaf_score)))]
-        eaf_score = [str(int(mean(eaf_score)))]
+        vaf_score = str(int(mean(vaf_score)))
+        eaf_score = str(int(mean(eaf_score)))
     # It's theoretically possible to break up a partial no-call allele into
     # separated gVCF lines, but it's hard. Treat the whole allele as no-call.
     if 'NOCALL' in filters:
         filters = ['NOCALL']
         var_allele = '?'
-        assert vaf_score == []
-        assert eaf_score == []
-        # vaf_score = []
-        # eaf_score = []
+        # print("process_allele() -> ", vaf_score, eaf_score)
+        # print("process_allele() -> ", var_allele, ref_allele, start, filters, vaf_score, eaf_score)
+        # assert vaf_score == []
+        # assert eaf_score == []
+        vaf_score = '.'
+        eaf_score = '.'
     return var_allele, ref_allele, start, filters, vaf_score, eaf_score
 
 
@@ -198,7 +207,8 @@ def get_split_pos_lines(data, cgi_input, header):
     return s1_data, s2_data, next_data
 
 
-def process_split_position(data, cgi_input, header, reference, var_only=False, qual_scores=False):
+def process_split_position(data, cgi_input, header, reference, var_only=False,
+                           qual_scores=False):
     """Process CGI var where alleles are reported separately.
 
     Split positions report each allele with one or more lines. To ensure that
@@ -225,25 +235,35 @@ def process_split_position(data, cgi_input, header, reference, var_only=False, q
 
     # Process all the lines to get concatenated sequences and other data.
     dbsnp_data = []
-    a1_seq, ref_seq, start, a1_filters, a1_vaf_score, a1_eaf_score = process_allele(
-        allele_data=s1_data, dbsnp_data=dbsnp_data,
-        header=header, reference=reference, qual_scores=qual_scores)
-    a2_seq, r2_seq, a2_start, a2_filters, a2_vaf_score, a2_eaf_score = process_allele(
-        allele_data=s2_data, dbsnp_data=dbsnp_data,
-        header=header, reference=reference, qual_scores=qual_scores)
+    a1_seq, ref_seq, start, a1_filters, a1_vaf_score, a1_eaf_score\
+        = process_allele(allele_data=s1_data, dbsnp_data=dbsnp_data,
+                         header=header, reference=reference,
+                         qual_scores=qual_scores)
+    a2_seq, r2_seq, a2_start, a2_filters, a2_vaf_score, a2_eaf_score\
+        = process_allele(allele_data=s2_data, dbsnp_data=dbsnp_data,
+                         header=header, reference=reference,
+                         qual_scores=qual_scores)
     # clean dbsnp data
     dbsnp_data = [x for x in dbsnp_data if x]
     if (a1_seq or ref_seq) and (a2_seq or r2_seq):
         # Check that reference sequence and positions match.
         assert ref_seq == r2_seq
         assert start == a2_start
+        # handles quality scores
+        if qual_scores:
+            # print(data)
+            # print(a1_vaf_score, a2_vaf_score, a1_eaf_score, a2_eaf_score)
+            var_scores = [a1_vaf_score + ',' + a2_vaf_score, 
+                          a1_eaf_score + ',' + a2_eaf_score]
+        else:
+            var_scores = []
         if (a1_seq != '?') or (a2_seq != '?'):
             yield {'chrom': chrom,
                    'start': start,
                    'dbsnp_data': dbsnp_data,
                    'ref_seq': ref_seq,
                    'alleles': [a1_seq, a2_seq],
-                   'var_scores': [a1_vaf_score + ',' + a2_vaf_score, a1_eaf_score + ',' + a2_eaf_score],
+                   'var_scores': var_scores,
                    'allele_count': '2',
                    'filters': list(set(a1_filters + a2_filters))}
         else:
@@ -255,7 +275,7 @@ def process_split_position(data, cgi_input, header, reference, var_only=False, q
                     'dbsnp_data': [],
                     'ref_seq': '=',
                     'alleles': ['?'],
-                    #'var_scores': [a1_vaf_score, a1_eaf_score, a2_vaf_score, a2_eaf_score],
+                    'var_scores': [],
                     'allele_count': '2',
                     'filters': ['NOCALL'],
                     'end': end}
@@ -264,7 +284,8 @@ def process_split_position(data, cgi_input, header, reference, var_only=False, q
     # the start of a new split position - very unlikely, though.
     if next_data[2] == "all" or next_data[1] == "1":
         out = process_full_position(
-            data=next_data, header=header, var_only=var_only, qual_scores=qual_scores)
+            data=next_data, header=header, var_only=var_only,
+            qual_scores=qual_scores)
     else:
         out = process_split_position(
             data=next_data, cgi_input=cgi_input, header=header,
@@ -381,7 +402,8 @@ def vcf_line(input_data, reference):
     return formatted_vcf_line(vcf_data)
 
 
-def process_next_position(data, cgi_input, header, reference, var_only, qual_scores):
+def process_next_position(data, cgi_input, header, reference, var_only,
+                          qual_scores):
     """
     Determine appropriate processing to get data, then convert it to VCF
 
@@ -403,14 +425,15 @@ def process_next_position(data, cgi_input, header, reference, var_only, qual_sco
     if data[2] == "all" or data[1] == "1":
         # The output from process_full_position is an array, so it can be
         # treated in the same manner as process_split_position output.
-        out = process_full_position(data=data, header=header, var_only=var_only, qual_scores=qual_scores)
+        out = process_full_position(data=data, header=header, var_only=var_only,
+                                    qual_scores=qual_scores)
     else:
         assert data[2] == "1"
         # The output from process_split_position is a generator, and may end
         # up calling itself recursively.
         out = process_split_position(
-            data=data, cgi_input=cgi_input, header=header, reference=reference, var_only=var_only,
-            qual_scores=qual_scores)
+            data=data, cgi_input=cgi_input, header=header, reference=reference,
+            var_only=var_only, qual_scores=qual_scores)
     if out:
 
         # ChrM is skipped because Complete Genomics is using a different
@@ -426,7 +449,8 @@ def process_next_position(data, cgi_input, header, reference, var_only, qual_sco
                (var_only and vl.rstrip().endswith('./.'))]
 
 
-def convert(cgi_input, twobit_ref, twobit_name, var_only=False, qual_scores=False):
+def convert(cgi_input, twobit_ref, twobit_name, var_only=False,
+            qual_scores=False):
     """Generator that converts CGI var data to VCF-formated strings"""
 
     # Set up CGI input. Default is to assume a str generator.
@@ -470,13 +494,15 @@ def convert(cgi_input, twobit_ref, twobit_name, var_only=False, qual_scores=Fals
                 yield line
 
 
-def convert_to_file(cgi_input, output_file, twobit_ref, twobit_name, var_only=False, qual_scores=False):
+def convert_to_file(cgi_input, output_file, twobit_ref, twobit_name,
+                    var_only=False, qual_scores=False):
     """Convert a CGI var file and output VCF-formatted data to file"""
 
     if isinstance(output_file, str):
         output_file = auto_zip_open(output_file, 'w')
 
-    conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref, twobit_name=twobit_name, var_only=var_only,
+    conversion = convert(cgi_input=cgi_input, twobit_ref=twobit_ref,
+                         twobit_name=twobit_name, var_only=var_only,
                          qual_scores=qual_scores)
     for line in conversion:
         output_file.write(line + "\n")
