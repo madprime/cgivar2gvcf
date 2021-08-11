@@ -14,7 +14,6 @@ import sys
 import twobitreader
 from twobitreader import download as twobitdownload
 
-
 VCF_DATA_TEMPLATE = OrderedDict([
     ('CHROM', None),
     ('POS', None),
@@ -128,7 +127,7 @@ def process_full_position(data, header, var_only=False, qual_scores=False):
 
 
 def process_allele(allele_data, dbsnp_data, header, reference, qual_scores):
-    """Combine data from multiple lines refering to a single allele.
+    """Combine data from multiple lines referring to a single allele.
 
     Returns three items in this order:
         (string) concatenated variant sequence (ie allele the genome has)
@@ -170,10 +169,10 @@ def process_allele(allele_data, dbsnp_data, header, reference, qual_scores):
         # print("None: ", vaf_score, eaf_score)
         # print(filters)
         # print(data)
-        
+
         assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
-        vaf_score = str(int(sum(vaf_score)/len(vaf_score)))
-        eaf_score = str(int(sum(eaf_score)/len(eaf_score)))
+        vaf_score = str(int(sum(vaf_score) / len(vaf_score)))
+        eaf_score = str(int(sum(eaf_score) / len(eaf_score)))
     # It's theoretically possible to break up a partial no-call allele into
     # separated gVCF lines, but it's hard. Treat the whole allele as no-call.
     if 'NOCALL' in filters:
@@ -194,7 +193,7 @@ def get_split_pos_lines(data, cgi_input, header):
     CGI var file reports alleles separately for heterozygous sites:
     all variant or reference information is called for the first allele,
     then for the second. This function moves forward in the file to
-    get lines for each (and ends up with one remaineder line as well).
+    get lines for each (and ends up with one remainder line as well).
     """
     s1_data = [data]
     s2_data = []
@@ -236,11 +235,11 @@ def process_split_position(data, cgi_input, header, reference, var_only=False,
 
     # Process all the lines to get concatenated sequences and other data.
     dbsnp_data = []
-    a1_seq, ref_seq, start, a1_filters, a1_vaf_score, a1_eaf_score\
+    a1_seq, ref_seq, start, a1_filters, a1_vaf_score, a1_eaf_score \
         = process_allele(allele_data=s1_data, dbsnp_data=dbsnp_data,
                          header=header, reference=reference,
                          qual_scores=qual_scores)
-    a2_seq, r2_seq, a2_start, a2_filters, a2_vaf_score, a2_eaf_score\
+    a2_seq, r2_seq, a2_start, a2_filters, a2_vaf_score, a2_eaf_score \
         = process_allele(allele_data=s2_data, dbsnp_data=dbsnp_data,
                          header=header, reference=reference,
                          qual_scores=qual_scores)
@@ -254,8 +253,12 @@ def process_split_position(data, cgi_input, header, reference, var_only=False,
         if qual_scores:
             # print(data)
             # print(a1_vaf_score, a2_vaf_score, a1_eaf_score, a2_eaf_score)
-            var_scores = [a1_vaf_score,a2_vaf_score,
-                          a1_eaf_score,a2_eaf_score]
+            if a1_seq == '?':
+                var_scores = [a2_vaf_score + ',' + a1_vaf_score,
+                              a2_eaf_score + ',' + a1_eaf_score]
+            else:
+                var_scores = [a1_vaf_score + ',' + a2_vaf_score,
+                              a1_eaf_score + ',' + a2_eaf_score]
         else:
             var_scores = []
         if (a1_seq != '?') or (a2_seq != '?'):
@@ -276,7 +279,7 @@ def process_split_position(data, cgi_input, header, reference, var_only=False,
                     'dbsnp_data': [],
                     'ref_seq': '=',
                     'alleles': ['?'],
-                    'var_scores': [],
+                   'var_scores': [],
                     'allele_count': '2',
                     'filters': ['NOCALL'],
                     'end': end}
@@ -357,7 +360,7 @@ def vcf_line(input_data, reference):
         vcf_data['INFO'] = 'END={}'.format(input_data['end'])
 
         return formatted_vcf_line(vcf_data)
-        
+
     # print("Check starts here .... \n")
     # VCF doesn't allow zero-length sequences. If we have this situation,
     # move the start backwards by one position, get that reference base,
@@ -398,12 +401,13 @@ def vcf_line(input_data, reference):
         # Case when an unknown/missing '?' allele caused the order of the 
         # genotypes to be switched (e.g. ./1  -> 1/.)
         vcf_data['FORMAT'] = 'GT:VAF:EAF'
-        if genome_alleles[0] == '?':
-            vcf_data['SAMPLE'] = ':'.join([genotype] + 
-                [input_data['var_scores'][1] + input_data['var_scores'][0]] +
-                [input_data['var_scores'][3] + input_data['var_scores'][2]])
-        else:
-            vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
+        vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
+        # if genome_alleles[0] == '?':
+        #     vcf_data['SAMPLE'] = ':'.join([genotype] + 
+        #         [input_data['var_scores'][1] + input_data['var_scores'][0]] +
+        #         [input_data['var_scores'][3] + input_data['var_scores'][2]])
+        # else:
+        #     vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
     else:
         vcf_data['FORMAT'] = 'GT'
         vcf_data['SAMPLE'] = genotype
@@ -449,7 +453,6 @@ def process_next_position(data, cgi_input, header, reference, var_only,
             data=data, cgi_input=cgi_input, header=header, reference=reference,
             var_only=var_only, qual_scores=qual_scores)
     if out:
-
         # ChrM is skipped because Complete Genomics is using a different
         # reference than UCSC's reference. Their documentation states:
         #   The version we use, "build 37," consists of the assembled nuclear
@@ -460,12 +463,12 @@ def process_next_position(data, cgi_input, header, reference, var_only,
         vcf_lines = [vcf_line(input_data=l, reference=reference) for l in out
                      if l['chrom'] != 'chrM']
         return [vl for vl in vcf_lines if not
-               (var_only and vl.rstrip().endswith('./.'))]
+        (var_only and vl.rstrip().endswith('./.'))]
 
 
 def convert(cgi_input, twobit_ref, twobit_name, var_only=False,
             qual_scores=False):
-    """Generator that converts CGI var data to VCF-formated strings"""
+    """Generator that converts CGI var data to VCF-formatted strings"""
 
     # Set up CGI input. Default is to assume a str generator.
     if isinstance(cgi_input, str) or isinstance(cgi_input, unicode):
@@ -534,7 +537,7 @@ def get_reference_genome_file(refseqdir, build):
         twobit_name = 'hg19.2bit'
         build = 'build37'
     if not twobit_name:
-        raise ValueError('Genome bulid "{}" not supported.'.format(build))
+        raise ValueError('Genome build "{}" not supported.'.format(build))
     twobit_path = os.path.join(refseqdir, twobit_name)
     if not os.path.exists(twobit_path):
         twobitdownload.save_genome('hg19', destdir=refseqdir)
@@ -556,7 +559,7 @@ def from_command_line():
         '-i', '--input', metavar='INPUTVARFILE',
         dest='cgivarfile',
         help='Path to Complete Genomics var file to convert. If omitted, data '
-        ' also be piped in as standard input.')
+             ' also be piped in as standard input.')
     parser.add_argument(
         '-o', '--output', metavar='OUTPUTVCFFILE',
         dest='vcfoutfile',
