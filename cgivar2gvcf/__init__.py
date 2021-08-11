@@ -116,6 +116,7 @@ def process_full_position(data, header, var_only=False, qual_scores=False):
         if qual_scores:
             var_scores.append(data[header['varScoreVAF']])
             var_scores.append(data[header['varScoreEAF']])
+            # var_scores = ','.join(var_scores)
         return [{'chrom': chrom,
                  'start': start,
                  'dbsnp_data': dbsnp_data,
@@ -171,8 +172,8 @@ def process_allele(allele_data, dbsnp_data, header, reference, qual_scores):
         # print(data)
         
         assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
-        vaf_score = str(int(mean(vaf_score)))
-        eaf_score = str(int(mean(eaf_score)))
+        vaf_score = str(int(sum(vaf_score)/len(vaf_score)))
+        eaf_score = str(int(sum(eaf_score)/len(eaf_score)))
     # It's theoretically possible to break up a partial no-call allele into
     # separated gVCF lines, but it's hard. Treat the whole allele as no-call.
     if 'NOCALL' in filters:
@@ -253,8 +254,8 @@ def process_split_position(data, cgi_input, header, reference, var_only=False,
         if qual_scores:
             # print(data)
             # print(a1_vaf_score, a2_vaf_score, a1_eaf_score, a2_eaf_score)
-            var_scores = [a1_vaf_score + ',' + a2_vaf_score, 
-                          a1_eaf_score + ',' + a2_eaf_score]
+            var_scores = [a1_vaf_score,a2_vaf_score,
+                          a1_eaf_score,a2_eaf_score]
         else:
             var_scores = []
         if (a1_seq != '?') or (a2_seq != '?'):
@@ -356,7 +357,8 @@ def vcf_line(input_data, reference):
         vcf_data['INFO'] = 'END={}'.format(input_data['end'])
 
         return formatted_vcf_line(vcf_data)
-
+        
+    # print("Check starts here .... \n")
     # VCF doesn't allow zero-length sequences. If we have this situation,
     # move the start backwards by one position, get that reference base,
     # and prepend this base to all sequences.
@@ -375,12 +377,17 @@ def vcf_line(input_data, reference):
 
     # Combine ref and alt for the full set of alleles, used for indexing.
     alleles = [ref_allele] + alt_alleles
+    # print("alleles = [ref_allele] + alt_alleles -> ", alleles, ref_allele, alt_alleles, "\n")
 
     # Get the indexed genotype.
     allele_indexes = [str(alleles.index(x)) for x in genome_alleles if
                       x != '?']
+    # print("genome_alleles -> ", genome_alleles, "\n")
+    # print("allele_indexes 1 -> ", allele_indexes, "\n")
     [allele_indexes.append('.') for x in genome_alleles if x == '?']
+    # print("allele_indexes 2 -> ", allele_indexes, "\n")
     genotype = '/'.join(allele_indexes)
+    # print("genotype -> ", genotype, "\n")
 
     vcf_data['CHROM'] = input_data['chrom']
     vcf_data['POS'] = str(start + 1)
@@ -388,8 +395,15 @@ def vcf_line(input_data, reference):
     vcf_data['REF'] = ref_allele
     vcf_data['ALT'] = ','.join(alt_alleles) if alt_alleles else '.'
     if input_data['var_scores']:
+        # Case when an unknown/missing '?' allele caused the order of the 
+        # genotypes to be switched (e.g. ./1  -> 1/.)
         vcf_data['FORMAT'] = 'GT:VAF:EAF'
-        vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
+        if genome_alleles[0] == '?':
+            vcf_data['SAMPLE'] = ':'.join([genotype] + 
+                [input_data['var_scores'][1] + input_data['var_scores'][0]] +
+                [input_data['var_scores'][3] + input_data['var_scores'][2]])
+        else:
+            vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
     else:
         vcf_data['FORMAT'] = 'GT'
         vcf_data['SAMPLE'] = genotype
