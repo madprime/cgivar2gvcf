@@ -14,6 +14,7 @@ import sys
 import twobitreader
 from twobitreader import download as twobitdownload
 
+
 VCF_DATA_TEMPLATE = OrderedDict([
     ('CHROM', None),
     ('POS', None),
@@ -30,7 +31,16 @@ VCF_DATA_TEMPLATE = OrderedDict([
 FILEDATE = datetime.datetime.now()
 
 
-def make_header(reference):
+def make_header(reference, qual_scores):
+    vaf, eaf = '', ''
+    if qual_scores:
+        vaf = """\n##FORMAT=<ID=VAF,Number=R,Type=Integer,Description="Positive integer representing confidence in the \
+call as reported in the varScoreVAF of Complete Genomics. It is derived from the probability estimates under \
+maximum likelihood variable allele fraction. This field is empty for reference calls or no-calls">"""
+        eaf = """\n##FORMAT=<ID=EAF,Number=R,Type=Integer,Description="Positive or negative integer representing \
+confidence in the call as reported in the varScoreEAF of Complete Genomics. It is derived from the probability \
+estimates under equal allele fraction model. This field is empty for reference calls or no-calls">"""
+
     header = """##fileformat=VCFv4.1
 ##fileDate={}{}{}
 ##source=cgivar2gvcf-version-0.1.9
@@ -40,11 +50,9 @@ def make_header(reference):
 ##FILTER=<ID=NOCALL,Description="Some or all of this record had no sequence call by Complete Genomics">
 ##FILTER=<ID=VQLOW,Description="Some or all of this sequence call marked as low variant quality by Complete Genomics">
 ##FILTER=<ID=AMBIGUOUS,Description="Some or all of this sequence call marked as ambiguous by Complete Genomics">
-##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
-##FORMAT=<ID=VAF,Number=R,Type=Integer,Description="Positive integer representing confidence in the call as reported in the varScoreVAF of Complete Genomics. It is derived from the probability estimates under maximum likelihood variable allele fraction. This field is empty for reference calls or no-calls">
-##FORMAT=<ID=EAF,Number=R,Type=Integer,Description="Positive or negative integer representing confidence in the call as reported in the varScoreEAF of Complete Genomics. It is derived from the probability estimates under equal allele fraction model. This field is empty for reference calls or no-calls">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">{}{}
 ##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">
-""".format(FILEDATE.year, FILEDATE.month, FILEDATE.day, reference)
+""".format(FILEDATE.year, FILEDATE.month, FILEDATE.day, reference, vaf, eaf)
     header = header + ("#" + '\t'.join([k for k in VCF_DATA_TEMPLATE]))
     return header
 
@@ -115,7 +123,6 @@ def process_full_position(data, header, var_only=False, qual_scores=False):
         if qual_scores:
             var_scores.append(data[header['varScoreVAF']])
             var_scores.append(data[header['varScoreEAF']])
-            # var_scores = ','.join(var_scores)
         return [{'chrom': chrom,
                  'start': start,
                  'dbsnp_data': dbsnp_data,
@@ -159,18 +166,9 @@ def process_allele(allele_data, dbsnp_data, header, reference, qual_scores):
             for dbsnp_item in data[header['xRef']].split(';'):
                 dbsnp_data.append(dbsnp_item.split(':')[1])
         if qual_scores:
-            # print("process_allele() -> 1st qual_scores call -> ", qual_scores)
-            assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
-            # print(data[header['varScoreVAF']], data[header['varScoreEAF']])
             vaf_score.append(int(data[header['varScoreVAF']]))
             eaf_score.append(int(data[header['varScoreEAF']]))
     if qual_scores and 'NOCALL' not in filters:
-        # print("process_allele() -> 2nd qual_scores call -> ", qual_scores)
-        # print("None: ", vaf_score, eaf_score)
-        # print(filters)
-        # print(data)
-
-        assert data[header['varScoreVAF']] and data[header['varScoreEAF']]
         vaf_score = str(int(sum(vaf_score) / len(vaf_score)))
         eaf_score = str(int(sum(eaf_score) / len(eaf_score)))
     # It's theoretically possible to break up a partial no-call allele into
@@ -178,10 +176,6 @@ def process_allele(allele_data, dbsnp_data, header, reference, qual_scores):
     if 'NOCALL' in filters:
         filters = ['NOCALL']
         var_allele = '?'
-        # print("process_allele() -> ", vaf_score, eaf_score)
-        # print("process_allele() -> ", var_allele, ref_allele, start, filters, vaf_score, eaf_score)
-        # assert vaf_score == []
-        # assert eaf_score == []
         vaf_score = '.'
         eaf_score = '.'
     return var_allele, ref_allele, start, filters, vaf_score, eaf_score
@@ -249,10 +243,9 @@ def process_split_position(data, cgi_input, header, reference, var_only=False,
         # Check that reference sequence and positions match.
         assert ref_seq == r2_seq
         assert start == a2_start
-        # handles quality scores
+        # Handles quality scores, including case of a1_seq='?'
+        # (the order of the alleles will be swapped by vcf_line() function)
         if qual_scores:
-            # print(data)
-            # print(a1_vaf_score, a2_vaf_score, a1_eaf_score, a2_eaf_score)
             if a1_seq == '?':
                 var_scores = [a2_vaf_score + ',' + a1_vaf_score,
                               a2_eaf_score + ',' + a1_eaf_score]
@@ -361,7 +354,6 @@ def vcf_line(input_data, reference):
 
         return formatted_vcf_line(vcf_data)
 
-    # print("Check starts here .... \n")
     # VCF doesn't allow zero-length sequences. If we have this situation,
     # move the start backwards by one position, get that reference base,
     # and prepend this base to all sequences.
@@ -380,17 +372,12 @@ def vcf_line(input_data, reference):
 
     # Combine ref and alt for the full set of alleles, used for indexing.
     alleles = [ref_allele] + alt_alleles
-    # print("alleles = [ref_allele] + alt_alleles -> ", alleles, ref_allele, alt_alleles, "\n")
 
     # Get the indexed genotype.
     allele_indexes = [str(alleles.index(x)) for x in genome_alleles if
                       x != '?']
-    # print("genome_alleles -> ", genome_alleles, "\n")
-    # print("allele_indexes 1 -> ", allele_indexes, "\n")
     [allele_indexes.append('.') for x in genome_alleles if x == '?']
-    # print("allele_indexes 2 -> ", allele_indexes, "\n")
     genotype = '/'.join(allele_indexes)
-    # print("genotype -> ", genotype, "\n")
 
     vcf_data['CHROM'] = input_data['chrom']
     vcf_data['POS'] = str(start + 1)
@@ -398,16 +385,8 @@ def vcf_line(input_data, reference):
     vcf_data['REF'] = ref_allele
     vcf_data['ALT'] = ','.join(alt_alleles) if alt_alleles else '.'
     if input_data['var_scores']:
-        # Case when an unknown/missing '?' allele caused the order of the 
-        # genotypes to be switched (e.g. ./1  -> 1/.)
         vcf_data['FORMAT'] = 'GT:VAF:EAF'
         vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
-        # if genome_alleles[0] == '?':
-        #     vcf_data['SAMPLE'] = ':'.join([genotype] + 
-        #         [input_data['var_scores'][1] + input_data['var_scores'][0]] +
-        #         [input_data['var_scores'][3] + input_data['var_scores'][2]])
-        # else:
-        #     vcf_data['SAMPLE'] = ':'.join([genotype] + input_data['var_scores'])
     else:
         vcf_data['FORMAT'] = 'GT'
         vcf_data['SAMPLE'] = genotype
@@ -463,7 +442,7 @@ def process_next_position(data, cgi_input, header, reference, var_only,
         vcf_lines = [vcf_line(input_data=l, reference=reference) for l in out
                      if l['chrom'] != 'chrM']
         return [vl for vl in vcf_lines if not
-        (var_only and vl.rstrip().endswith('./.'))]
+               (var_only and vl.rstrip().endswith('./.'))]
 
 
 def convert(cgi_input, twobit_ref, twobit_name, var_only=False,
@@ -478,7 +457,7 @@ def convert(cgi_input, twobit_ref, twobit_name, var_only=False,
     reference = twobitreader.TwoBitFile(twobit_ref)
 
     # Output header.
-    header = make_header(twobit_name).split('\n')
+    header = make_header(twobit_name, qual_scores=qual_scores).split('\n')
     for line in header:
         yield line
 
@@ -559,7 +538,7 @@ def from_command_line():
         '-i', '--input', metavar='INPUTVARFILE',
         dest='cgivarfile',
         help='Path to Complete Genomics var file to convert. If omitted, data '
-             ' also be piped in as standard input.')
+        ' also be piped in as standard input.')
     parser.add_argument(
         '-o', '--output', metavar='OUTPUTVCFFILE',
         dest='vcfoutfile',
@@ -572,7 +551,7 @@ def from_command_line():
         help='Only report variant lines (i.e. VCF, but not gVCF)')
     parser.add_argument(
         '-q', '--qual-scores', action='store_true', dest='qualscores',
-        help='Include VAF and EAF variant quality scores in the output')
+        help='Include CG VAF and EAF variant quality scores in the output')
     args = parser.parse_args()
 
     # Get local twobit file from its directory. Download and store if needed.
