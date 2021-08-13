@@ -33,24 +33,26 @@ An example command for a variant-only VCF file (not gVCF):
 
 Writes the new VCF file to the specified output destination.
 
-`convert_to_file(cgi_input, output_file, twobit_ref, twobit_name, var_only=False)`
+`convert_to_file(cgi_input, output_file, twobit_ref, twobit_name, var_only=False, qual_scores=False)`
 
 * **cgi_input** - Inputed Complete Genomics var file. Can be a file-like object (i.e. already open) or a path to a file (uncompressed, gzip, or bzip2 compressed).
 * **output_file** - Where to put the result. A "gz" suffix results in gzip compression, a "bz2" suffix results in bzip2 compression.
 * **twobit_ref** - Path to the UCSC twobit reference genome file
 * **twobit_name** - name of the twobit reference file (so we can cite this in the VCF header as the "reference")
 * **var_only** - (optional) default false. Set to true if you only want variant lines.
+* **qual_scores** - (optional) default false. Set to true if you only want complete genomics VAF and EAF scores to be included in the output.
 
 ### convert
 
 Returns a generator object that yields lines of the VCF file.
 
-`convert(cgi_input, twobit_ref, twobit_name, var_only=False)`
+`convert(cgi_input, twobit_ref, twobit_name, var_only=False, qual_scores=False)`
 
 * **cgi_input** - Inputed Complete Genomics var file. Can be a file-like object (i.e. already open) or a path to a file (uncompressed, gzip, or bzip2 compressed).
 * **twobit_ref** - Path to the UCSC twobit reference genome file
 * **twobit_name** - name of the twobit reference file (so we can cite this in the VCF header as the "reference")
 * **var_only** - (optional) default false. Set to true if you only want variant lines.
+* **qual_scores** - (optional) default false. Set to true if you only want complete genomics VAF and EAF scores to be included in the output.
 
 ### get_reference_genome_file
 
